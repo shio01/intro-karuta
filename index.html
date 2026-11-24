@@ -22,9 +22,11 @@ input{flex:1;padding:10px;border:2px solid var(--line);border-radius:10px;backgr
 .status{min-height:44px;padding:10px;border:1px dashed var(--line);border-radius:10px;text-align:center;margin-bottom:10px;font-size:15px}
 .info{display:none;border:2px solid var(--acc);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--card);font-size:14px}
 .info h3{margin:0 0 6px;font-size:16px;color:var(--acc)}.info p{margin:6px 0 0}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.card{height:92px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--fg);font-size:14px;font-weight:600;cursor:pointer;padding:0;overflow:hidden}
-.card img{width:100%;height:100%;object-fit:cover}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{display:flex;flex-direction:column;gap:6px;padding:6px;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--fg);font-size:13px;font-weight:700;text-align:center;cursor:pointer}
+.jk{width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:8px;background:rgba(128,128,128,.12);display:block}
+.ph{display:flex;align-items:center;justify-content:center;font-size:36px}
+.tt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;min-height:2.6em;width:100%}
 .card:active{transform:scale(.95)}
 .card.you{border-color:var(--ok);opacity:.35;pointer-events:none;outline:3px solid var(--ok)}
 .card.other{border-color:var(--ng);opacity:.35;pointer-events:none;outline:3px solid var(--ng)}
@@ -38,6 +40,7 @@ input{flex:1;padding:10px;border:2px solid var(--line);border-radius:10px;backgr
 <main>
 <h1>🎴 イントロかるた</h1>
 <section id="home">
+ <div class="status" id="msg" hidden></div>
  <div class="row"><input id="name" placeholder="ニックネーム" maxlength="10"></div>
  <div class="row"><button class="tab on" data-m="gakumas">学マスモード</button><button class="tab" data-m="shiny">シャニマスモード</button></div>
  <div class="row"><button class="main" id="create" style="flex:1">部屋を作る</button></div>
@@ -86,12 +89,20 @@ function setMode(m){mode=m;document.documentElement.dataset.mode=m==="shiny"?"sh
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===b));setMode(b.dataset.m)});
 const nm=()=>($("name").value.trim()||"ゲスト").slice(0,10);
 
-$("create").onclick=async()=>{unlock();await ready;songs=await loadSongs(mode);if(songs.length<2)return;
-code=String(Math.floor(1000+Math.random()*9000));
-await set(ref(db,"rooms/"+code),{mode,host:uid,state:"lobby",round:-1,startAt:0,deck:shuffle(songs.map(s=>s.ID)).slice(0,12),players:{[uid]:{name:nm()}}});enter()};
-$("join").onclick=async()=>{unlock();await ready;code=$("code").value.trim();const s=await get(ref(db,"rooms/"+code));
-if(!s.exists())return alert("部屋が見つかりません");setMode(s.val().mode);songs=await loadSongs(mode);if(!songs.length)return;
-await set(ref(db,`rooms/${code}/players/${uid}`),{name:nm()});enter()};
+const say=t=>{const m=$("msg");m.hidden=!t;m.textContent=t||""};
+const tmo=(p,ms,t)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error(t)),ms))]);
+$("create").onclick=async()=>{try{unlock();say("接続中…");
+await tmo(ready,8000,"ログインできません。Firebaseの「匿名」ログインが有効か、FIREBASE_CONFIGの値を確認してください");
+say("曲リストを読み込み中…");songs=await loadSongs(mode);
+if(songs.length<2)return say("曲が2曲以上必要です。シートの見出し(ID,unit,image,title,explain,music)と行数を確認してください。読み込めた曲数: "+songs.length);
+code=String(Math.floor(1000+Math.random()*9000));say("部屋を作成中…");
+await tmo(set(ref(db,"rooms/"+code),{mode,host:uid,state:"lobby",round:-1,startAt:0,deck:shuffle(songs.map(s=>s.ID)).slice(0,12),players:{[uid]:{name:nm()}}}),8000,"データベースに書き込めません。databaseURLとルールを確認してください");
+say("");enter()}catch(e){say("エラー: "+e.message)}};
+$("join").onclick=async()=>{try{unlock();say("接続中…");
+await tmo(ready,8000,"ログインできません。Firebaseの「匿名」ログインが有効か、FIREBASE_CONFIGの値を確認してください");
+code=$("code").value.trim();const s=await tmo(get(ref(db,"rooms/"+code)),8000,"データベースに接続できません。databaseURLを確認してください");
+if(!s.exists())return say("部屋が見つかりません");setMode(s.val().mode);songs=await loadSongs(mode);if(!songs.length)return say("曲リストを読み込めませんでした");
+await tmo(set(ref(db,`rooms/${code}/players/${uid}`),{name:nm()}),8000,"データベースに書き込めません。ルールを確認してください");say("");enter()}catch(e){say("エラー: "+e.message)}};
 function enter(){$("home").hidden=true;$("room").hidden=false;onValue(ref(db,"rooms/"+code),s=>{room=s.val();if(room)sync()})}
 $("start").onclick=()=>update(ref(db,"rooms/"+code),{state:"playing",round:0,startAt:now()+3000});
 
@@ -129,7 +140,8 @@ $("roomcode").textContent="合言葉 "+code;$("left").textContent="残り "+(dec
 const p=$("players");p.innerHTML="";Object.entries(room.players||{}).sort((a,b)=>(score[b[0]]||0)-(score[a[0]]||0)).forEach(([id,v])=>{
 const s=document.createElement("span");s.textContent=(id===room.host?"👑 ":"")+v.name+" "+(score[id]||0)+(id===uid?"（あなた）":"");p.appendChild(s)});
 const g=$("grid");g.innerHTML="";deckData.forEach(c=>{const b=document.createElement("button");b.className="card"+(owner[c.ID]?(owner[c.ID]===uid?" you":" other"):"");
-if(c.image){const im=document.createElement("img");im.src=c.image;im.alt=c.title;b.appendChild(im)}else b.textContent=c.title;
+let im;if(c.image){im=document.createElement("img");im.src=c.image;im.alt="";im.className="jk"}else{im=document.createElement("div");im.textContent="🎵";im.className="jk ph"}
+const t=document.createElement("span");t.className="tt";t.textContent=c.title;b.append(im,t);
 b.onclick=()=>{tap(c);if(locked)b.classList.add("bad")};g.appendChild(b)});
 $("start").hidden=!(room.host===uid&&room.state==="lobby")}
 function showInfo(c){const k=Object.keys(c).filter(x=>!COMMON.includes(x)&&c[x]);
