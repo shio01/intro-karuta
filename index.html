@@ -59,10 +59,9 @@ input{flex:1;padding:10px;border:2px solid var(--line);border-radius:10px;backgr
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getAuth,signInAnonymously} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {getDatabase,ref,set,get,update,onValue,runTransaction} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+import {FIREBASE_CONFIG,SOURCES} from "./config.js";
 
-// ===== 設定（ここを書き換える） =====
-const FIREBASE_CONFIG={apiKey:"AIzaSyANLI7PRkZNjRwTZmfAUbbpNzMpczFWgD4",authDomain:"intro-karuta.firebaseapp.com",databaseURL:"https://intro-karuta-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"intro-karuta",appId:"1:366436776020:web:9bbe7b686e906c4055d5c1"};
-const SOURCES={gakumas:"",shiny:"https://docs.google.com/spreadsheets/d/e/2PACX-1vTlLRvSTNDmEGz8pSZ92JtFT9WSQswEbTWAyJeonW5Sa_h2qHdjXnJxqTKP7mVUbiA9UTGomzxRCL0a/pub?gid=0&single=true&output=csv"}; // 各タブの「ウェブに公開」CSVのURL
+// ===== 設定は config.js にあります =====
 const AUDIO_DIR="audio/";
 const LABELS={unit:"ユニット"};
 const COMMON=["ID","image","title","explain","music"];
@@ -120,7 +119,7 @@ function src(c){const f=c.music||(c.ID?c.ID+".mp3":"");return f?(/^https?:/.test
 function startRound(r){stop();locked=false;$("info").style.display="none";$("st").textContent="まもなく開始…";
 const c=deckData[r];audio=src(c)?new Audio(src(c)):null;if(audio){audio.loop=true;audio.preload="auto"}
 setTimeout(()=>{if(room.round!==r||(room.win||{})[r])return;$("st").textContent="🎵 この曲はどれ？";
-if(audio)audio.play().catch(()=>{audio=null;synth(c)});else synth(c)},Math.max(0,room.startAt-now()))}
+if(audio)audio.play().catch(e=>{audio=null;synth(c);$("st").textContent="⚠ 自動生成に切替: "+e.name+" / "+src(c)});else synth(c)},Math.max(0,room.startAt-now()))}
 function stop(){clearTimeout(timer);if(audio){audio.pause();audio=null}}
 function hash(s){let h=7;for(const ch of s)h=(h*31+ch.charCodeAt(0))%2147483647;return h||1}
 function rng(s){return()=>(s=(s*16807)%2147483647)/2147483647}
